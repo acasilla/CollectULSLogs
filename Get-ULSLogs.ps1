@@ -2,10 +2,10 @@
 ## Title       : Get-UlsLogs
 ## Description : This script will collect Individual ULS logs from specified servers or all servers in the farm. It will compress them into <servername>.zip files
 ## Authors      : Jeremy Walker | Anthony Casillas
-## Date        : 11-14-2017
+## Date        : 12-20-2017
 ## Input       : 
 ## Output      : 
-## Usage       : .\Get-UlsLogs.ps1 -Servers "server1", "server2" -startTime "01/01/2017 11:30" -endTime "01/01/2017 14:30"
+## Usage       : .\Get-UlsLogs.ps1 -Servers "server1", "server2" -startTime "12/18/2023 09:00" -endTime "12/18/2023 13:00"
 ## Notes       :  If no '-Servers' switch is passed, it will grab ULS from all SP servers in the farm.. 
 ## Tag         :  ULS, Logging, Sharepoint, Powershell
 ## 
@@ -36,7 +36,6 @@ $spDiag = get-spdiagnosticconfig
 $global:ulsPath = $spDiag.LogLocation
 $global:LogCutInterval = $spDiag.LogCutInterval
 
-
  #########################################
  function grabULS2($serv)
  {
@@ -54,14 +53,13 @@ $global:LogCutInterval = $spDiag.LogCutInterval
     $endTime = $endTime.Replace("'", "")
     $eTime = Get-Date $endTime
     
-
-    $files = get-childitem -path $localPath | ?{$_.Extension -eq ".log"} | select Name, CreationTime
-    $specfiles = $files | ?{$_.CreationTime -lt $eTime -and $_.CreationTime -ge $sTime}
+    $files = get-childitem -path $localPath -Filter "*-??????*-????.log" | Select-Object Name, CreationTime
+    $specfiles = $files | Where-Object{$_.CreationTime -lt $eTime -and $_.CreationTime -ge $sTime}
     if($specfiles.Length -eq 0)
     {
         " We did not find any ULS logs for server, " + $serv +  ", within the given time range"
         $rmvDir = $outputdir + "\" + $serv
-        rmdir $rmvDir -Recurse -Force
+        Remove-Item $rmvDir -Recurse -Force
         return;
     }
     foreach($file in $specfiles)
@@ -71,7 +69,6 @@ $global:LogCutInterval = $spDiag.LogCutInterval
         copy-item "$localpath\$filename" $outputdir\$serv
     }
 
-    
     $timestamp = $(Get-Date -format "yyyyMMdd_HHmm")
     $sourceDir = $tempSvrPath
     $zipfilename = $tempSvrPath + "_" + $timestamp + ".zip"
@@ -81,12 +78,8 @@ $global:LogCutInterval = $spDiag.LogCutInterval
     $compressionLevel = [System.IO.Compression.CompressionLevel]::Optimal
     [System.IO.Compression.ZipFile]::CreateFromDirectory( $tempSvrPath, $zipfilename, $compressionLevel, $false )
     Write-Host ("Cleaning up the ULS logs and temp directory at: " + $tempSvrPath) -ForegroundColor DarkYellow
-    rmdir $sourcedir -Recurse -Force
+    Remove-Item $sourcedir -Recurse -Force
  }
- 
- 
-
-
  ######################
  #Get Destination Path#
  ######################
@@ -136,15 +129,14 @@ if((($spVersion -ne 14) -and ($spVersion -ne 15) -and ($spVersion -ne 16)))
     ""
     " **We will copy files from each server into a temp directory in the defined Output Folder and then compress those files into a .zip file. This can take several minutes to complete depending on network speed, number of files and size of files."
     ""
-   
  }
 
  ######################################
  ######################################
- if($Servers -eq $null)
+ if($null -eq $Servers)
  {
   
-   $Servers = get-spserver | ?{$_.Role -ne "Invalid"} | % {$_.Address}
+   $Servers = get-spserver | Where-Object{$_.Role -ne "Invalid"} | ForEach-Object{$_.Address}
   } 
     foreach($server in $Servers)
     {
